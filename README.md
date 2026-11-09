@@ -74,6 +74,45 @@ Ejecuta las pruebas del hito 2 con:
 python -m pytest tests\test_change_analysis.py examples\sample_api\tests -v
 ```
 
+## Hito 3: generación de casos con Gemini
+
+El cliente usa la API REST de Gemini mediante `httpx`, ya declarado para `TestClient`; no se agrega un SDK. Obtiene `GEMINI_API_KEY` y `GEMINI_MODEL` primero del entorno y luego del archivo `.env` local. El modelo predeterminado es `gemini-3.8-flash`. `.env.example` solo contiene un marcador de posición: nunca guardes una clave real en el repositorio ni compartas el archivo `.env`.
+
+Desde PowerShell, con `.venv` activo y en la raíz:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+$env:PYTHONPATH = (Join-Path $PWD 'src')
+python -m api_test_assistant generate --impacts impacts.json --output cases.json
+```
+
+También se pueden establecer las variables solo para la sesión actual, sin escribirlas en archivos:
+
+```powershell
+$env:GEMINI_API_KEY = "TU_CLAVE"
+$env:GEMINI_MODEL = "gemini-3.8-flash"
+$env:PYTHONPATH = (Join-Path $PWD 'src')
+python -m api_test_assistant generate --impacts impacts.json --output cases.json
+```
+
+El generador toma del commit destino de `impacts.json` el contrato OpenAPI y `rf_map.yaml`, y envía a Gemini solo las operaciones afectadas y sus esquemas referenciados. Valida estrictamente IDs, técnicas, RF, estados, método/ruta y códigos de respuesta antes de escribir el archivo. Si falta configuración, se alcanza una cuota o la respuesta no cumple el contrato, el comando termina con error explícito y no persiste casos inválidos. La prueba real de Gemini es opcional; por defecto todas las pruebas usan un cliente HTTP simulado.
+
+Pruebas del generador, detector y API:
+
+```powershell
+$env:PYTHONPATH = (Join-Path $PWD 'src')
+python -m pytest tests\test_case_generation.py tests\test_change_analysis.py examples\sample_api\tests -v
+```
+
+Para habilitar explícitamente la prueba de integración real, configura `.env` o las variables de entorno y ejecuta:
+
+```powershell
+$env:RUN_GEMINI_INTEGRATION = "1"
+python -m pytest tests\test_case_generation.py -k optional_real_gemini_integration -v
+Remove-Item Env:RUN_GEMINI_INTEGRATION
+```
+
 ### Iniciar la API para exploración manual
 
 Con `.venv` activo:
@@ -89,6 +128,6 @@ La documentación interactiva estará en `http://127.0.0.1:8000/docs` y OpenAPI 
 - `fastapi`: API y contrato OpenAPI.
 - `pydantic`: validación de entradas y límites del contrato.
 - `uvicorn`: servidor para exploración local.
-- `httpx`: transporte usado por `TestClient`; Starlette aún lo admite, aunque versiones recientes emiten una advertencia de deprecación a favor de `httpx2`.
+- `httpx`: transporte usado por `TestClient` y cliente REST para Gemini. No se usa un SDK adicional.
 - `pytest`: ejecución de las pruebas.
 - `PyYAML`: lectura y verificación del mapa RF del SUT.

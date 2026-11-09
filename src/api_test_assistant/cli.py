@@ -5,6 +5,11 @@ import json
 from pathlib import Path
 import sys
 
+from .case_generation import (
+    CaseGeneratorClient,
+    CaseGenerationError,
+    generate_cases,
+)
 from .git_changes import GitAnalysisError, analyze_git_changes
 from .impact import correlate_impact
 from .openapi_diff import (
@@ -14,28 +19,28 @@ from .openapi_diff import (
 )
 
 
-def _arguments() -> argparse.Namespace:
+def _generate_arguments(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compara cambios Git y OpenAPI y emite impactos como JSON."
+        prog="python -m api_test_assistant generate",
+        description="Genera casos de prueba para impactos Git/OpenAPI con Gemini.",
     )
-    parser.add_argument("--base", required=True, help="Referencia Git base.")
-    parser.add_argument("--head", required=True, help="Referencia Git destino.")
-    parser.add_argument("--repo", default=".", help="Ruta al repositorio Git (por defecto: directorio actual).")
-    parser.add_argument(
-        "--spec",
-        default="examples/sample_api/openapi.json",
-        help="Ruta relativa a la especificación OpenAPI versionada.",
-    )
-    parser.add_argument(
-        "--output",
-        default="-",
-        help="Archivo JSON de salida (por defecto, stdout).",
-    )
-    return parser.parse_args()
+    parser.add_argument("--impacts", required=True, help="Archivo JSON de impactos.")
+    parser.add_argument("--output", required=True, help="Archivo JSON de casos de salida.")
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = _arguments()
+def main(argv: list[str] | None = None, *, client: CaseGeneratorClient | None = None) -> int:
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments and arguments[0] == "generate":
+        args = _generate_arguments(arguments[1:])
+        try:
+            generate_cases(args.impacts, args.output, client=client)
+        except CaseGenerationError as error:
+            print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
+            return 2
+        return 0
+
+    args = _impact_arguments_from(arguments)
     try:
         git_analysis = analyze_git_changes(args.repo, args.base, args.head)
     except GitAnalysisError as error:
@@ -76,3 +81,23 @@ def _write_output(destination: str, content: str) -> None:
         sys.stdout.write(content)
         return
     Path(destination).write_text(content, encoding="utf-8")
+
+
+def _impact_arguments_from(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Compara cambios Git y OpenAPI y emite impactos como JSON."
+    )
+    parser.add_argument("--base", required=True, help="Referencia Git base.")
+    parser.add_argument("--head", required=True, help="Referencia Git destino.")
+    parser.add_argument("--repo", default=".", help="Ruta al repositorio Git (por defecto: directorio actual).")
+    parser.add_argument(
+        "--spec",
+        default="examples/sample_api/openapi.json",
+        help="Ruta relativa a la especificación OpenAPI versionada.",
+    )
+    parser.add_argument(
+        "--output",
+        default="-",
+        help="Archivo JSON de salida (por defecto, stdout).",
+    )
+    return parser.parse_args(argv)
