@@ -58,6 +58,6 @@ La documentación interactiva estará en `http://127.0.0.1:8000/docs` y OpenAPI 
 - `fastapi`: API y contrato OpenAPI.
 - `pydantic`: validación de entradas y límites del contrato.
 - `uvicorn`: servidor para exploración local.
-- `httpx2`: transporte usado por `TestClient` con la versión actual de Starlette.
+- `httpx`: transporte usado por `TestClient`; Starlette aún lo admite, aunque versiones recientes emiten una advertencia de deprecación a favor de `httpx2`.
 - `pytest`: ejecución de las pruebas.
 - `PyYAML`: lectura y verificación del mapa RF del SUT.
