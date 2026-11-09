@@ -76,3 +76,10 @@ def test_rf_map_matches_openapi_operations() -> None:
         assert re.fullmatch(r"RF\d{2}\.\d", requirement["id"])
         operation = openapi["paths"][requirement["path"]][requirement["method"].lower()]
         assert operation["operationId"] == requirement["operation_id"]
+
+
+def test_versioned_openapi_snapshot_matches_application() -> None:
+    snapshot_path = Path(__file__).parents[1] / "openapi.json"
+    snapshot = yaml.safe_load(snapshot_path.read_text(encoding="utf-8"))
+
+    assert snapshot == create_app().openapi()
