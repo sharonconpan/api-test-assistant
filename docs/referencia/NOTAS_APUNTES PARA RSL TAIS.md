@@ -1,42 +1,36 @@
-## **2\. Cada compañera, la primera vez**
-
-```
-git clone https://github.com/mariaSolangeEzcurra/Prototipo-DeltaHeal.git
-cd Prototipo-DeltaHeal
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy .env.example .env
-notepad .env
-```
-
-En `.env`, cada una pone **su propia clave de Gemini**, sacada de aistudio.google.com/apikey con su cuenta. Cada cuenta tiene su propia cuota, y como el modelo sigue siendo `gemini-3.8-flash`, los resultados son comparables.
-
-Después, con Docker Desktop abierto, prepara las APIs (una sola vez por PC, porque la carpeta `benchmark/apis/` no se sube a GitHub):
-
-```
-python benchmark/setup_apis.py
-```
-
-## **3\. Para continuar el experimento (cualquiera de ustedes)**
-
-```
-git pull
-python benchmark/run_benchmark.py
-```
-
-Cuando termine o se acabe la cuota, sube lo nuevo:
-
-```
-git add benchmark/results
-git commit -m "Más corridas del experimento"
-git push
-```
-
-## **Reglas importantes**
-
-1. **Solo una persona ejecuta a la vez.** Si dos corren al mismo tiempo, ambas modifican `results.csv` y git dará conflictos al subir. Avísense por el grupo: "estoy corriendo yo" y "ya subí".  
-2. **Siempre `git pull` antes de ejecutar** y `git push` al terminar.  
-3. **Nadie cambia `benchmark.yaml`** ni el modelo durante el experimento.  
-4. **Nadie borra la carpeta `benchmark\results`.**
+IDEA RESUMIDA:
+Desarrollar y evaluar una herramienta inteligente que detecte cambios en APIs REST mediante Git y OpenAPI, genere casos de prueba con un LLM, permita su validación por el desarrollador, los convierta automáticamente en pruebas Pytest y los ejecute mediante un pipeline CI/CD, con el propósito de determinar hasta qué punto la IA puede automatizar el proceso de testing manteniendo la calidad y confiabilidad de las pruebas.
+DETALLADO:
+1. Problemática
+En el desarrollo de sistemas web basados en APIs REST, los cambios realizados sobre el código pueden introducir nuevas funcionalidades, modificar endpoints, alterar reglas de validación o afectar funcionalidades existentes. Ante estos cambios, el proceso de identificación de las funcionalidades afectadas, diseño de casos de prueba y actualización de las pruebas suele depender de actividades manuales realizadas por los desarrolladores. Esto puede demandar tiempo, generar pruebas incompletas y dificultar la detección de errores, especialmente en escenarios negativos, casos límite y cambios que afectan la interacción entre diferentes componentes del sistema.
+Asimismo, aunque las prácticas de Integración Continua y Entrega Continua (CI/CD) permiten automatizar la ejecución de pruebas ante nuevos commits o Pull Requests, la generación y actualización de los casos de prueba continúa dependiendo, en muchos escenarios, de la intervención del desarrollador. Por ello, existe una oportunidad para automatizar no solamente la ejecución de las pruebas, sino también las etapas previas de identificación de cambios, diseño y generación de casos de prueba, reduciendo la intervención manual sin eliminar la supervisión del desarrollador.
+2. Propuesta de solución
+Se propone diseñar e implementar una herramienta inteligente para repositorios de APIs REST capaz de analizar automáticamente los cambios realizados en el código mediante Git y contrastarlos con la especificación OpenAPI del proyecto. A partir de esta información, la herramienta identificará los endpoints, funcionalidades y reglas de validación potencialmente afectados por los cambios y utilizará un Large Language Model (LLM) para generar casos de prueba orientados a dichas modificaciones.
+Los casos de prueba generados inicialmente se presentarán en formato tabular, incluyendo información como el endpoint involucrado, método HTTP, parámetros o datos de entrada, comportamiento esperado y tipo de escenario. Esta etapa permitirá incorporar un mecanismo de human-in-the-loop, donde el desarrollador pueda revisar, modificar y aprobar los casos antes de que sean transformados en pruebas ejecutables. De esta manera, la IA no reemplaza completamente al desarrollador, sino que automatiza las tareas repetitivas manteniendo una instancia de validación humana.
+3. Generación automática de pruebas ejecutables
+Una vez aprobados los casos de prueba, la herramienta los transformará automáticamente en código de pruebas utilizando Pytest, evitando que el desarrollador tenga que implementar manualmente cada escenario propuesto por el LLM.
+Las pruebas podrán contemplar tanto escenarios funcionales como situaciones de error y casos límite, de acuerdo con la información disponible en la especificación OpenAPI y los cambios detectados en el repositorio. De esta manera, se busca que la generación automática no se limite únicamente a comprobar respuestas exitosas, sino que contribuya a una cobertura más amplia del comportamiento de la API.
+4. Automatización mediante CI/CD
+Las pruebas generadas se integrarán posteriormente en un pipeline de Integración Continua y Entrega Continua (CI/CD), utilizando herramientas del ecosistema de GitHub, como GitHub Actions. Ante la creación de un nuevo commit o Pull Request, el pipeline podrá ejecutar automáticamente las pruebas correspondientes y generar un reporte con sus resultados.
+Esto permitirá pasar de un proceso tradicional donde varias actividades requieren intervención y verificación manual a un flujo automatizado:
+Commit / Pull Request → detección de cambios → análisis de OpenAPI → generación de casos con LLM → revisión y aprobación → generación de Pytest → ejecución automática → reporte de resultados.
+La ejecución podrá realizarse en un entorno Linux, debido a que este tipo de entornos es ampliamente utilizado en servidores y sistemas de integración continua, facilitando además la reproducibilidad del proceso de ejecución.
+5. Incorporación de IA y agentes
+La utilización de LLM representa el componente inteligente de la propuesta. Sin embargo, el objetivo no será únicamente emplear IA para generar código, sino estudiar hasta qué punto es posible automatizar el ciclo de testing mediante IA, especialmente ante modificaciones frecuentes del software.
+En este contexto, también se considerará la evolución hacia agentes de IA para ingeniería de software, donde diferentes tareas del proceso pueden ser ejecutadas de manera coordinada y con menor intervención humana. La propuesta incorporará este enfoque de automatización de manera controlada, manteniendo inicialmente la aprobación del desarrollador antes de convertir los casos generados en pruebas ejecutables.
+Esto permite estudiar el equilibrio entre automatización y control humano, evitando asumir que una prueba generada por IA es correcta simplemente por haber sido generada automáticamente.
+6. Enfoque en la calidad y confiabilidad de las pruebas
+Un aspecto fundamental de la propuesta será evaluar la calidad de las pruebas generadas, ya que automatizar el proceso no garantiza por sí mismo que las pruebas sean correctas o útiles.
+Por ello, la investigación deberá analizar aspectos como la corrección de los casos generados, su capacidad para detectar defectos, cobertura de escenarios, presencia de casos negativos y casos límite, y cantidad de pruebas que requieren modificaciones por parte del desarrollador.
+De esta forma, el objetivo no será afirmar que la IA genera pruebas "sin errores", sino determinar qué tan confiables y efectivas son las pruebas generadas automáticamente y cuánto puede reducirse la intervención manual manteniendo la calidad del proceso de testing.
+7. Sustento mediante el estado del arte
+El estado del arte deberá justificar por qué se seleccionan específicamente las APIs REST como objeto de estudio, analizando su presencia y relevancia en el desarrollo de software, particularmente en aplicaciones web y proyectos donde se requiere validar endpoints, parámetros, respuestas y reglas de negocio.
+También se revisarán estudios empíricos relacionados con la distribución de defectos en los diferentes niveles de testing, incluyendo pruebas unitarias, de integración, de API y de aceptación. Esto permitirá determinar en qué niveles se concentra una mayor cantidad de problemas y justificar qué tipos de pruebas deberían ser priorizados por la herramienta.
+Finalmente, se analizarán investigaciones recientes sobre LLM, agentes de IA, generación automática de casos de prueba, Pytest y automatización de testing mediante CI/CD, identificando qué soluciones existen actualmente y qué limitaciones presentan.
+8. Aporte esperado
+El aporte de la propuesta será la implementación y evaluación de un flujo integrado de automatización inteligente del testing para APIs REST, en lugar de abordar únicamente la generación de pruebas mediante IA o su ejecución mediante CI/CD de forma independiente.
+La herramienta buscará integrar en un mismo proceso:
+Git + OpenAPI + LLM + revisión humana + Pytest + CI/CD + reportes
+permitiendo que las pruebas se adapten a los cambios realizados en el repositorio y puedan ejecutarse automáticamente dentro del ciclo de desarrollo.
+En consecuencia, la investigación permitirá evaluar qué nivel de automatización es alcanzable actualmente mediante LLM y agentes de IA en el proceso de testing, cuánto se reduce la intervención manual y qué impacto tiene este enfoque sobre la calidad, cobertura y detección de defectos en APIs REST.
 
