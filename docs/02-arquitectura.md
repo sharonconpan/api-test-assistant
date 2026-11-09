@@ -38,6 +38,9 @@ flowchart LR
     Reporter --> Store
     Reporter --> Artifacts[Reporte y artefactos CI]
     CI[GitHub Actions en Linux] --> Runner
+    Dispatch[workflow_dispatch en rama de confianza] --> LLM
+    Validate --> CandidateArtifact[Artefacto de casos candidatos]
+    CandidateArtifact --> UI
     Examples[API FastAPI de ejemplo] --> Spec
     Examples --> Runner
 ```
@@ -95,9 +98,11 @@ En cada hoja de casos, las columnas aparecen en este orden: `ID`, `Técnica`, `D
 
 Las métricas por RF incluyen total de casos, distribución por técnica, estados (Exitoso, Fallido y No ejecutado), y porcentaje de aprobación sobre casos revisados. La hoja resumen por módulo presenta `#Casos`, `Exitoso`, `Fallido` y `Automatizado`. Un caso no ejecutado no se cuenta como exitoso ni fallido.
 
-### 3.8 Generador de Pytest
+### 3.8 Generador de Pytest y cliente de API
 
-Transforma exclusivamente casos cuya decisión humana sea **Aprobado** y que satisfagan el contrato interno de generación. Cada prueba incorpora el ID del caso y el RF para permitir rastrear su resultado. Las pruebas se escriben en un espacio designado y el código generado puede inspeccionarse antes de ejecutarse. Casos pendientes y rechazados no se convierten en pruebas.
+Transforma exclusivamente casos cuya decisión humana sea **Aprobado** y que satisfagan el contrato interno de generación. Cada prueba incorpora el ID del caso y el RF del sistema bajo prueba (SUT) para permitir rastrear su resultado. Las pruebas se escriben en un espacio designado y el código generado puede inspeccionarse antes de ejecutarse. Casos pendientes y rechazados no se convierten en pruebas.
+
+Las pruebas dirigidas a la API FastAPI de ejemplo usarán `fastapi.testclient.TestClient` en proceso, con una instancia de aplicación creada por una fábrica importable. Esta opción evita abrir puertos, iniciar y detener procesos externos y depender de tiempos de espera; facilita pruebas deterministas y paralelas en Windows y Linux. Para una API objetivo remota o que requiera un proceso separado se podrá configurar una URL base, pero no se iniciará un servidor Uvicorn para cada prueba del ejemplo.
 
 ### 3.9 Ejecutor y reportero
 
@@ -107,11 +112,18 @@ El reportero agrega resultados por RF y módulo, calcula métricas de evaluació
 
 ### 3.10 Integración continua
 
-GitHub Actions ejecuta validaciones y pruebas en un runner Linux ante `push` y `pull_request`. La ejecución CI usa los casos y pruebas aprobados ya disponibles; una clave Gemini no es necesaria para probarlos. Si en el futuro se añade generación durante CI, debe ser un paso explícito, protegido y no debe exponer secretos a código no confiable de Pull Requests.
+GitHub Actions ofrece dos caminos separados:
+
+- Los workflows automáticos de `push` y `pull_request` validan el repositorio y ejecutan las pruebas Pytest aprobadas y versionadas en un runner Linux. Para las pruebas de la API de ejemplo, Pytest importa la aplicación FastAPI y usa `TestClient` en proceso; no arranca Uvicorn ni requiere una URL externa. La clave Gemini no es necesaria.
+- Un workflow manual `workflow_dispatch` genera candidatos cuando una persona lo inicia en la rama predeterminada de confianza, nunca desde un Pull Request ni desde una referencia seleccionada no confiable. Usa `GEMINI_API_KEY` como secret, permisos de solo lectura y contexto limitado; excluye archivos de entorno, credenciales y datos sensibles del diff enviado al modelo. Sube únicamente los casos candidatos validados como artefacto con retención limitada; no aprueba casos, no genera Pytest ni ejecuta código de la propuesta. El desarrollador descarga el artefacto y lo importa a la interfaz de revisión; después de aprobar, genera y versiona Pytest, cuyo commit/PR activa el workflow automático.
+
+El job de generación debe estar condicionado a que `github.ref` corresponda a la rama predeterminada y usar un environment protegido para el secret cuando la configuración del repositorio lo permita. No se utilizará `pull_request_target`, no se interpolarán datos de casos como comandos y la clave no se imprimirá ni se incluirá en el artefacto. El flujo manual falla explícitamente ante error de configuración, proveedor o validación de respuesta.
 
 ### 3.11 API de ejemplo
 
-`examples/` alojará una API FastAPI pequeña y autocontenida. FastAPI ofrece una especificación OpenAPI local, lo cual permite validar la extracción del contrato, operaciones CRUD, datos válidos e inválidos y casos límite sin depender de un servicio externo.
+`examples/` alojará una API FastAPI pequeña y autocontenida. FastAPI ofrece una especificación OpenAPI local, lo cual permite validar la extracción del contrato, operaciones CRUD, datos válidos e inválidos y casos límite sin depender de un servicio externo. El archivo `examples/sample_api/rf_map.yaml` asignará explícitamente cada método/ruta a un requisito funcional de la API bajo prueba (SUT); no se usarán los RF internos de la herramienta como identificadores de casos.
+
+En CI, el job instala las dependencias del ejemplo y de prueba, importa la fábrica de la aplicación y ejecuta `pytest` con `TestClient`. No es necesario ejecutar `uvicorn` como servicio en segundo plano. La ejecución manual de la API mediante Uvicorn puede documentarse para exploración interactiva, pero no forma parte del ciclo de vida de las pruebas automatizadas.
 
 ## 4. Flujo de datos
 
@@ -167,9 +179,10 @@ El ejemplo ilustra nombres y valores, no un resultado real de ejecución. El esq
 | Mantener JSON como formato canónico y exportar CSV/XLSX. | Conserva trazabilidad y estructura, y a la vez ofrece formatos editables para revisión e intercambio. | Usar solo Excel como almacenamiento, lo que dificulta validar y versionar campos anidados. |
 | Aprobar casos antes de generar Pytest. | Conserva el control humano y limita la ejecución de contenido propuesto automáticamente. | Generar o ejecutar de inmediato todos los casos del LLM. |
 | Correlacionar diffs de código y OpenAPI con evidencia separada. | Evita atribuciones falsas cuando una fuente falta o las correspondencias son heurísticas. | Inferir impactos únicamente desde archivos cambiados o solo desde cambios de contrato. |
-| Mantener generación LLM fuera del job CI ordinario. | Evita costos no deterministas y exposición de secretos en eventos no confiables; permite ejecución reproducible de pruebas aprobadas. | Llamar a Gemini en cada evento `push`/`pull_request` sin revisión ni control de permisos. |
+| Mantener generación LLM fuera del job CI ordinario y ofrecer un workflow manual restringido. | Evita costos y llamadas no deterministas en cada PR; el disparo manual en rama predeterminada permite generar candidatos en contexto confiable y conservar la revisión humana, sin exponer la clave a código de PR. | Llamar a Gemini automáticamente en cada `push`/`pull_request` o permitir que una referencia no confiable consuma el secret. |
 | Comenzar con interfaz web local y módulos desacoplados. | Reduce complejidad operativa y mantiene una experiencia tabular editable. | Servicio multiusuario remoto, autenticación y almacenamiento distribuido, fuera del alcance inicial. |
 | Usar FastAPI como fixture de ejemplo. | Publica OpenAPI automáticamente y es apropiado para validar integración con Pytest. | Depender de una API remota, cuya disponibilidad y contrato podrían cambiar. |
+| Usar `TestClient` en proceso para las pruebas de la API FastAPI de ejemplo. | Evita puertos y procesos externos, reduce puntos de falla y hace que la suite sea reproducible en runners Linux y Windows. | Iniciar Uvicorn por prueba; se reserva un servidor separado para pruebas de despliegue o servicios cuyo comportamiento dependa del transporte/proceso real. |
 
 ## 7. Estructura de carpetas propuesta
 
@@ -183,10 +196,12 @@ El ejemplo ilustra nombres y valores, no un resultado real de ejecución. El esq
 │   ├── 01-documento-de-requisitos.md
 │   ├── 02-arquitectura.md
 │   ├── 03-plan-de-hitos.md
-│   └── 04-pipeline-ci.md
+│   ├── 04-pipeline-ci.md
+│   └── informe-evaluacion.md
 ├── examples/
 │   └── sample_api/
 │       ├── app/
+│       ├── rf_map.yaml
 │       └── tests/
 ├── src/
 │   └── api_test_assistant/
