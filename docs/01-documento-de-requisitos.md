@@ -8,11 +8,56 @@ La propuesta responde al esfuerzo manual que implica determinar qué comportamie
 
 Como antecedente únicamente, existe un experimento previo denominado **DeltaHeal**, que comparó generación de pruebas con LLM frente a una línea base tradicional. Se cita como antecedente de investigación; esta propuesta no depende de su código, datos, configuración ni resultados.
 
-## 2. Objetivo de investigación
+## 2. Antecedentes y motivación
+
+### 2.1 APIs REST
+
+REST es un objeto de estudio pertinente porque las APIs REST exponen contratos observables mediante recursos, métodos HTTP, parámetros, cuerpos y códigos de respuesta; estos elementos permiten derivar escenarios verificables y relacionar cambios de implementación con cambios de contrato. OpenAPI ofrece una descripción estructurada de operaciones y restricciones que puede compararse entre revisiones. La prevalencia de REST en aplicaciones web y la distribución de defectos entre niveles de prueba deberán sustentarse en las fuentes del mapeo sistemático, no asumirse como resultados de este proyecto. **[CITAR S0X del mapeo sistemático]**
+
+### 2.2 LLM para pruebas de APIs
+
+El estado del arte debe revisar estudios empíricos que usan LLM para generar, priorizar o reparar pruebas de APIs, incluidos sus métodos de evaluación, líneas base, capacidad para cubrir entradas válidas e inválidas, detección de defectos, reproducibilidad y necesidad de revisión humana. También se deben documentar limitaciones como alucinaciones, dependencia del prompt, variabilidad entre ejecuciones y costo. Estas afirmaciones se completarán y contrastarán con las fuentes identificadas en el mapeo sistemático; no se atribuyen aquí resultados a estudios específicos. **[CITAR S0X del mapeo sistemático]**
+
+La brecha que aborda esta propuesta es evaluar un flujo integrado y supervisado —cambios Git y OpenAPI, generación de casos, revisión humana, Pytest, CI/CD y reporte— en lugar de tratar la generación del LLM como equivalente a pruebas correctas o útiles.
+
+## 3. Objetivo de investigación
 
 Diseñar, implementar y evaluar un flujo integrado para automatizar, con supervisión humana, la generación y ejecución de pruebas de APIs REST a partir de cambios de código y de especificación. La evaluación determinará hasta qué punto el uso de IA puede reducir el esfuerzo manual manteniendo la corrección, capacidad de detección de defectos y cobertura de escenarios de las pruebas.
 
-### 2.1 Métricas de evaluación
+### 3.1 Preguntas de investigación e hipótesis
+
+La evaluación es exploratoria y de alcance acotado; las hipótesis son preguntas contrastables, no resultados esperados garantizados.
+
+| Código | Pregunta de investigación |
+|---|---|
+| PI1 | ¿Qué proporción de los casos generados con Gemini, después de la revisión humana, es correcta y ejecutable frente a casos diseñados manualmente siguiendo el catálogo? |
+| PI2 | ¿Cómo se compara la capacidad de detección de defectos y la cobertura de escenarios de ambos enfoques en los cambios evaluados? |
+| PI3 | ¿Qué esfuerzo de revisión y qué proporción de modificaciones requiere el conjunto generado con Gemini, y qué presencia tiene de casos negativos y límite? |
+
+| Código | Hipótesis exploratoria |
+|---|---|
+| H1 | En los cambios evaluados, la tasa de detección de defectos de los casos aprobados con asistencia de Gemini será comparable a la de la línea base manual. |
+| H2 | El tiempo mediano de diseño y preparación, incluida la revisión humana, será menor con asistencia de Gemini que con el diseño manual. |
+
+Por el tamaño reducido de la muestra, los resultados se interpretarán descriptivamente y no se generalizarán como prueba estadística para todas las APIs o modelos.
+
+### 3.2 Protocolo de evaluación
+
+Se usará un protocolo pequeño, pareado y reproducible sobre la API de ejemplo. Antes de generar casos se congelarán los escenarios de referencia, el contrato de la versión limpia y los cambios evaluados.
+
+1. **Cambios:** evaluar tres cambios controlados y versionados, cada uno vinculado a una operación y RF de la API de ejemplo. Se conservarán el diff Git, el diff OpenAPI y el commit exacto.
+2. **Defectos:** para cada cambio se prepararán dos variantes defectuosas independientes y documentadas (seis defectos en total). Cada variante debe ser activable/reproducible, tener un oráculo claro y ser detectada por al menos una prueba de referencia antes de incluirse. No se introducirán defectos cuya detección no pueda validarse.
+3. **Línea base:** para cada cambio, una persona diseñará un conjunto de casos manuales siguiendo el mismo catálogo, contrato y escenarios disponibles para Gemini. Se congelará antes de observar las generaciones del LLM.
+4. **Gemini:** se harán tres generaciones independientes por cambio (nueve generaciones en total) con el mismo modelo configurado, instrucción, esquema, evidencia y límites de contexto. Se registrarán la configuración no secreta, fecha, duración y tokens/costo disponibles. Si el proveedor no permite fijar una semilla, se documentará que las repeticiones son no deterministas.
+5. **Revisión:** un mismo revisor aplicará una rúbrica fija a casos manuales y generados. Para cada caso marcará corrección, aprobación/rechazo, modificación sustancial o de formato, tipo de escenario y tiempo de revisión. La línea base no se alterará después de ver la salida del LLM.
+6. **Ejecución:** cada conjunto de casos manual y cada repetición de Gemini se ejecutará contra las dos variantes defectuosas de su cambio correspondiente. Un defecto se contará como detectado solo si una prueba asociada falla por una aserción pertinente al defecto; errores de infraestructura se excluirán y reportarán aparte.
+7. **Cobertura:** antes de generar los casos se fijará una lista de escenarios esperados por operación, incluidos los negativos y los valores límite derivables del contrato. Se medirá la presencia de cada escenario entre los casos aprobados.
+
+La matriz de resultados tendrá una fila por conjunto/corrida y las columnas: **Cambio**, **RF**, **Enfoque (manual/Gemini)**, **Repetición**, **Casos propuestos**, **Casos correctos**, **Casos aprobados**, **Defectos detectados/ejecutados**, **Escenarios cubiertos/definidos**, **Casos negativos**, **Casos límite**, **Casos modificados sustancialmente**, **Tiempo de diseño/generación**, **Tiempo de revisión**, **Tokens/costo disponible** y **Observaciones**. Se reportarán los denominadores y datos ausentes; no se rellenarán resultados por anticipado. Un resumen agregado presentará las mismas métricas por enfoque, además de limitaciones y resultados fallidos de infraestructura.
+
+Este protocolo contrasta la capacidad del generador en tres cambios, no mide de manera exhaustiva todos los tipos de APIs, y sus números son el tamaño planeado de la muestra, no resultados observados.
+
+### 3.3 Métricas de evaluación
 
 Las métricas se calcularán sobre un conjunto de cambios y escenarios de referencia documentados y reproducibles. Para las proporciones, se informará el numerador, denominador y tamaño de muestra; las métricas sin casos aplicables se marcarán como **N/A**, no como cero.
 
@@ -28,13 +73,27 @@ Las métricas se calcularán sobre un conjunto de cambios y escenarios de refere
 
 El estado **Exitoso/Fallido** de un caso representa exclusivamente el resultado de ejecutar su prueba Pytest. No lo determina el LLM ni una revisión estática. Los casos aún no ejecutados conservan el estado **No ejecutado**.
 
-## 3. Alcance
+## 4. Alcance
 
 La primera versión se enfocará en repositorios Python que exponen APIs REST y disponen de una especificación OpenAPI local, versionada o recuperable desde el repositorio. Permitirá comparar revisiones Git, analizar cambios de código y de especificación, generar casos propuestos, revisarlos en una interfaz tabular, exportarlos a Excel, generar Pytest desde los aprobados y ejecutar/reportar los resultados.
 
-Se incluirá una API pequeña de ejemplo basada en FastAPI dentro de `examples/`, con una especificación OpenAPI utilizable para demostrar y probar el flujo de extremo a extremo. Esta API será un fixture local de la herramienta, no un servicio externo ni una dependencia de DeltaHeal.
+Se incluirá una API pequeña de ejemplo basada en FastAPI dentro de `examples/`, con una especificación OpenAPI utilizable para demostrar y probar el flujo de extremo a extremo. Esta API será un fixture local de la herramienta, no un servicio externo ni una dependencia de DeltaHeal. Los identificadores RF incluidos en los casos pertenecen a los requisitos funcionales de esta **API bajo prueba (SUT)**, no a los requisitos funcionales RF01–RF11 de la herramienta.
 
-## 4. Actores
+### 4.1 Requisitos funcionales de la API de ejemplo (SUT)
+
+La API de ejemplo será un CRUD mínimo de elementos (`items`). Su archivo versionado `examples/sample_api/rf_map.yaml` asignará explícitamente cada operación HTTP a su RF y módulo. El analizador usará el método y la ruta normalizada como clave; el mapeo también podrá documentar `operationId` para hacer la asignación más robusta. No se delegará al LLM la asignación de RF, ya que el mapeo declarativo es revisable, determinista y puede validarse contra OpenAPI.
+
+| RF del SUT | Módulo | Operación OpenAPI |
+|---|---|---|
+| RF01.1 — Crear elemento | Gestión de elementos | `POST /items` |
+| RF01.2 — Listar elementos | Gestión de elementos | `GET /items` |
+| RF01.3 — Consultar elemento | Gestión de elementos | `GET /items/{item_id}` |
+| RF01.4 — Actualizar elemento | Gestión de elementos | `PUT /items/{item_id}` |
+| RF01.5 — Eliminar elemento | Gestión de elementos | `DELETE /items/{item_id}` |
+
+Cada caso se asignará al RF del SUT indicado por la operación principal que verifica. Una ruta/método ausente del mapa deberá producir un diagnóstico para completar la asignación; no se inventará un RF ni se reutilizará un RF de la herramienta. Cada ID de caso seguirá usando el RF del SUT, por ejemplo `CP-RF01.1-01`.
+
+## 5. Actores
 
 | Actor | Responsabilidad |
 |---|---|
@@ -43,7 +102,7 @@ Se incluirá una API pequeña de ejemplo basada en FastAPI dentro de `examples/`
 | CI (GitHub Actions) | Valida y ejecuta las pruebas disponibles en un entorno Linux ante los eventos configurados, conserva reportes y artefactos y comunica resultados. No aprueba casos ni inventa estados. |
 | Gemini | Servicio LLM que propone casos a partir del contexto acotado de cambios y OpenAPI; sus salidas se consideran no confiables hasta la revisión humana. |
 
-## 5. Requisitos funcionales
+## 6. Requisitos funcionales de la herramienta
 
 ### RF01. Selección de revisiones y detección de cambios Git
 
@@ -121,10 +180,11 @@ La herramienta ejecutará las pruebas con Pytest y actualizará el estado de cad
 
 ### RF09. Integración continua y reportes
 
-La solución incluirá un workflow de GitHub Actions para validar y ejecutar pruebas en Linux en eventos `push` y `pull_request`, y publicar reportes y artefactos de ejecución.
+La solución incluirá workflows de GitHub Actions para validar y ejecutar pruebas en Linux en eventos `push` y `pull_request`, y un workflow manual `workflow_dispatch` para generar casos candidatos con Gemini desde la rama predeterminada de confianza y publicarlos como artefacto para revisión.
 
 **Criterios de aceptación**
 - El workflow no expone secretos a código no confiable de Pull Requests ni requiere una clave Gemini para ejecutar pruebas ya generadas.
+- La generación manual valida la rama de confianza, no ejecuta el código del SHA destino, excluye y redacta secretos del contexto, no imprime la clave y publica solo candidatos no aprobados como artefacto; estos no generan ni ejecutan Pytest hasta su aprobación humana.
 - Un job fallido hace fallar el workflow correspondiente y queda visible en el reporte.
 - Los artefactos permiten vincular resultados, pruebas y casos sin incluir secretos.
 
@@ -146,7 +206,7 @@ El repositorio incluirá una API mínima autocontenida para validar el flujo, su
 - El ejemplo cubre al menos una operación con entradas válidas, inválidas y límites comprobables.
 - La aplicación no requiere acceder a repositorios externos para ejecutarse.
 
-## 6. Formato obligatorio de los casos de prueba
+## 7. Formato obligatorio de los casos de prueba
 
 Las primeras nueve columnas y su orden son:
 
@@ -166,27 +226,21 @@ Al final se añadirán, en este orden, las columnas de API: **Método HTTP**, **
 
 No se amplía el conjunto permitido de técnicas en esta etapa. Si una futura evaluación requiere una categoría específica de valores límite, se documentará como extensión compatible y se acordará antes de incorporarla al formato.
 
-## 7. Matriz de trazabilidad RF → CP → archivo Pytest
+## 8. Matriz de trazabilidad RF → CP → archivo Pytest
 
-La matriz se completará progresivamente conforme se definan los casos y se generen las pruebas. Los identificadores y rutas siguientes son ejemplos de asignación, no casos ya generados ni resultados de ejecución.
+La siguiente matriz usa los RF de la API de ejemplo (SUT), no los RF de la herramienta. Los IDs y rutas Pytest son plantillas de trazabilidad para los casos que se definan durante la implementación; no representan casos generados ni resultados de ejecución.
 
 | Requisito funcional | Caso(s) CP | Archivo Pytest asociado |
 |---|---|---|
-| RF01 | CP-RF01-01… | `tests/generated/test_rf01_*.py` |
-| RF02 | CP-RF02-01… | `tests/generated/test_rf02_*.py` |
-| RF03 | CP-RF03-01… | `tests/generated/test_rf03_*.py` |
-| RF04 | CP-RF04-01… | `tests/generated/test_rf04_*.py` |
-| RF05 | CP-RF05-01… | `tests/generated/test_rf05_*.py` |
-| RF06 | CP-RF06-01… | `tests/generated/test_rf06_*.py` |
-| RF07 | CP-RF07-01… | `tests/generated/test_rf07_*.py` |
-| RF08 | CP-RF08-01… | `tests/generated/test_rf08_*.py` |
-| RF09 | CP-RF09-01… | `tests/generated/test_rf09_*.py` |
-| RF10 | CP-RF10-01… | `tests/generated/test_rf10_*.py` |
-| RF11 | CP-RF11-01… | `tests/generated/test_rf11_*.py` |
+| RF01.1 — Crear elemento | CP-RF01.1-01… | `examples/sample_api/tests/generated/test_rf01_1_*.py` |
+| RF01.2 — Listar elementos | CP-RF01.2-01… | `examples/sample_api/tests/generated/test_rf01_2_*.py` |
+| RF01.3 — Consultar elemento | CP-RF01.3-01… | `examples/sample_api/tests/generated/test_rf01_3_*.py` |
+| RF01.4 — Actualizar elemento | CP-RF01.4-01… | `examples/sample_api/tests/generated/test_rf01_4_*.py` |
+| RF01.5 — Eliminar elemento | CP-RF01.5-01… | `examples/sample_api/tests/generated/test_rf01_5_*.py` |
 
 En la implementación, la matriz se actualizará con las relaciones reales entre cada RF, sus IDs `CP-...` y las rutas Pytest generadas. Un requisito de infraestructura o proceso puede no tener un caso de API aplicable; en ese caso se documentará como **N/A justificado**, no se crearán casos ficticios.
 
-## 8. Requisitos no funcionales
+## 9. Requisitos no funcionales
 
 - **Reproducibilidad:** registrar revisiones Git, hash o versión del contrato, configuración no secreta, modelo y versión del generador cuando estén disponibles, decisiones humanas y resultados. Evitar depender de respuestas no versionadas para repetir ejecuciones.
 - **Seguridad de la clave:** mantener `GEMINI_API_KEY` fuera del repositorio y de los artefactos; usar variables de entorno localmente y GitHub Secrets en CI. No exponer secretos a workflows de Pull Requests desde forks.
@@ -197,7 +251,7 @@ En la implementación, la matriz se actualizará con las relaciones reales entre
 - **Usabilidad y compatibilidad:** proporcionar instrucciones en español y comandos reproducibles para Windows PowerShell, además de ejecución de CI en Linux.
 - **Mantenibilidad:** separar responsabilidades de Git, OpenAPI, generación, revisión, exportación, Pytest y reportes.
 
-## 9. Restricciones
+## 10. Restricciones
 
 - El modelo objetivo es Gemini, configurable mediante `GEMINI_MODEL`, cuyo valor predeterminado será `gemini-3.8-flash`.
 - La clave se obtiene únicamente de `GEMINI_API_KEY`; no se acepta una clave escrita en el código o en archivos versionados.
@@ -207,7 +261,7 @@ En la implementación, la matriz se actualizará con las relaciones reales entre
 - La ejecución CI se realizará en Linux y se integrará con GitHub Actions.
 - El repositorio debe poder probarse sin depender del código de DeltaHeal ni de otro repositorio externo.
 
-## 10. Supuestos
+## 11. Supuestos
 
 - El repositorio objetivo contiene suficiente historia Git para comparar dos revisiones.
 - Existe una especificación OpenAPI legible en al menos una de las revisiones; cuando no exista, la herramienta informará la limitación y podrá presentar impactos sustentados solo en código.
@@ -216,7 +270,7 @@ En la implementación, la matriz se actualizará con las relaciones reales entre
 - Los casos de evaluación y defectos de referencia pueden definirse y revisarse independientemente de las salidas del LLM.
 - La API FastAPI de `examples/` es un ejemplo de validación, no una dependencia impuesta a todos los repositorios analizados.
 
-## 11. Riesgos y mitigaciones
+## 12. Riesgos y mitigaciones
 
 | Riesgo | Mitigación |
 |---|---|
@@ -230,7 +284,7 @@ En la implementación, la matriz se actualizará con las relaciones reales entre
 | El conjunto de evaluación favorece al generador o mide métricas inconsistentes. | Definir escenarios y defectos de referencia antes de ejecutar; documentar denominadores, exclusiones y protocolo. |
 | Pull Requests no confiables ejecutan código con permisos excesivos. | Usar permisos mínimos, no exponer secrets a forks y separar la ejecución de código de la disponibilidad de credenciales. |
 
-## 12. Fuera de alcance
+## 13. Fuera de alcance
 
 - Reemplazar el juicio del desarrollador o aprobar casos automáticamente.
 - Garantizar que una prueba generada demuestre ausencia de defectos.
