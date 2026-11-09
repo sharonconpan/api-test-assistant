@@ -1,0 +1,27 @@
+module: Gestión de elementos
+requirements:
+  - id: RF01.1
+    description: Crear un elemento
+    method: POST
+    path: /items
+    operation_id: create_item
+  - id: RF01.2
+    description: Listar los elementos
+    method: GET
+    path: /items
+    operation_id: list_items
+  - id: RF01.3
+    description: Consultar un elemento
+    method: GET
+    path: /items/{item_id}
+    operation_id: get_item
+  - id: RF01.4
+    description: Actualizar un elemento
+    method: PUT
+    path: /items/{item_id}
+    operation_id: update_item
+  - id: RF01.5
+    description: Eliminar un elemento
+    method: DELETE
+    path: /items/{item_id}
+    operation_id: delete_item
